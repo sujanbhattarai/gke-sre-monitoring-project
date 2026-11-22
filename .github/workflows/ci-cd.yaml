@@ -1,11 +1,14 @@
 
-name: GKE SRE CI Pipeline
+name: GKE SRE CI/CD Pipeline
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -19,6 +22,49 @@ jobs:
       - name: Install YAML validator
         run: pip install yamllint
 
-      - name: Validate Kubernetes YAML syntax
+      - name: Validate Kubernetes YAML
         run: |
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" kubernetes/
+
+  deploy:
+    name: Deploy to GKE
+    needs: validate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-gke-deployer@project-918e19aa-5e72-4ef1-a47.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Connect to GKE
+        run: |
+          gcloud container clusters get-credentials cluster1 \
+            --region us-east4 \
+            --project project-918e19aa-5e72-4ef1-a47
+
+      - name: Deploy application
+        run: |
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/service.yaml
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/sre-demo-app \
+            --timeout=180s
+          kubectl get pods -l app=sre-demo
