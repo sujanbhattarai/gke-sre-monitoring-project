@@ -29,7 +29,7 @@ jobs:
   deploy:
     name: Deploy to GKE
     needs: validate
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     permissions:
@@ -43,14 +43,17 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          workload_identity_provider: projects/950882012358/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-gke-deployer@project-918e19aa-5e72-4ef1-a47.iam.gserviceaccount.com
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: project-918e19aa-5e72-4ef1-a47
 
-      - name: Install GKE auth plugin
-        run: gcloud components install gke-gcloud-auth-plugin --quiet
+      - name: Install GKE authentication plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet
 
       - name: Connect to GKE
         run: |
