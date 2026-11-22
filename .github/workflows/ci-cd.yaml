@@ -1,0 +1,37 @@
+
+name: GKE SRE CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate Kubernetes YAML
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.31.0'
+
+      - name: Validate Kubernetes manifests
+        run: |
+          kubectl create --dry-run=client \
+            --validate=false \
+            -f kubernetes/deployment.yaml \
+            -o yaml > /dev/null
+
+          kubectl create --dry-run=client \
+            --validate=false \
+            -f kubernetes/service.yaml \
+            -o yaml > /dev/null
+
+      - name: Validation completed
+        run: echo "Kubernetes manifest checks passed!"
