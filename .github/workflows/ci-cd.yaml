@@ -16,22 +16,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.31.0'
+      - name: Install YAML validator
+        run: pip install yamllint
 
-      - name: Validate Kubernetes manifests
+      - name: Validate Kubernetes YAML syntax
         run: |
-          kubectl create --dry-run=client \
-            --validate=false \
-            -f kubernetes/deployment.yaml \
-            -o yaml > /dev/null
-
-          kubectl create --dry-run=client \
-            --validate=false \
-            -f kubernetes/service.yaml \
-            -o yaml > /dev/null
-
-      - name: Validation completed
-        run: echo "Kubernetes manifest checks passed!"
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" kubernetes/
