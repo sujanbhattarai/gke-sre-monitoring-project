@@ -70,4 +70,4 @@ jobs:
         run: |
           kubectl rollout status deployment/sre-demo-app \
             --timeout=180s
-          kubectl get pods -l app=sre-demo
+          kubectl get pods -l app=sre-demo-app
