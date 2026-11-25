@@ -1,4 +1,3 @@
-
 name: GKE SRE CI/CD Pipeline
 
 on:
@@ -6,9 +5,19 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  PROJECT_ID: project-918e19aa-5e72-4ef1-a47
+  REGION: us-east4
+  CLUSTER_NAME: cluster1
+  REGISTRY: us-east4-docker.pkg.dev
+  REPOSITORY: sre-docker-repo
+  IMAGE_NAME: sre-demo-app
+  NAMESPACE: default
 
 jobs:
   validate:
@@ -27,10 +36,15 @@ jobs:
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" kubernetes/
 
   deploy:
-    name: Deploy to GKE
+    name: Build and Deploy to GKE
     needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    concurrency:
+      group: gke-production-deployment
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -49,7 +63,21 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: project-918e19aa-5e72-4ef1-a47
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker "$REGISTRY" --quiet
+
+      - name: Build Docker image
+        run: |
+          IMAGE_URI="$REGISTRY/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA"
+          docker build -t "$IMAGE_URI" -f app/app/Dockerfile app/
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Push Docker image
+        run: |
+          docker push "$IMAGE_URI"
 
       - name: Install GKE authentication plugin
         run: |
@@ -57,17 +85,26 @@ jobs:
 
       - name: Connect to GKE
         run: |
-          gcloud container clusters get-credentials cluster1 \
-            --region us-east4 \
-            --project project-918e19aa-5e72-4ef1-a47
+          gcloud container clusters get-credentials "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --project "$PROJECT_ID"
 
       - name: Deploy application
         run: |
-          kubectl apply -f kubernetes/deployment.yaml
-          kubectl apply -f kubernetes/service.yaml
+          kubectl set image deployment/sre-demo-app \
+            nginx="$IMAGE_URI" \
+            -n "$NAMESPACE"
 
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/sre-demo-app \
-            --timeout=180s
-          kubectl get pods -l app=sre-demo-app
+            -n "$NAMESPACE" --timeout=300s
+          kubectl get pods -n "$NAMESPACE" -l app=sre-demo-app
+
+      - name: Verify application health
+        run: |
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 10 --max-time 15 \
+            http://136.82.221.246 -o /tmp/application.html
+          grep -q "GKE SRE Monitoring Project" /tmp/application.html
+          echo "Application health verification successful"

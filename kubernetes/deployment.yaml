@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:stable
+          image: us-east4-docker.pkg.dev/project-918e19aa-5e72-4ef1-a47/sre-docker-repo/sre-demo-app:v1
           imagePullPolicy: IfNotPresent
 
           ports:
